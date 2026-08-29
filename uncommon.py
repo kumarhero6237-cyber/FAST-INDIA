@@ -1,6 +1,6 @@
-# Made by Uncommon.exe | Optimized by RAMSAGAR
-# Fast & Reliable Free Fire Banner API
-# OB54 LEAK - OPTIMIZED VERSION
+# Made by Uncommon.exe | Optimized & Fixed by RAMSAGAR
+# Fast & Reliable Free Fire Banner API - India Compatible
+# OB54 LEAK - FIXED FOR INDIA INFO API FORMAT
 
 import io
 import os
@@ -72,7 +72,6 @@ uncommon_client = httpx.AsyncClient(
 )
 
 # CPU-bound image processing pool
-# Use CPU count for optimal parallelism
 import multiprocessing
 WORKERS = min(4, multiprocessing.cpu_count() * 2)
 uncommon_process_pool = ThreadPoolExecutor(max_workers=WORKERS)
@@ -186,13 +185,11 @@ def uncommon_process_banner_image(
         center + half - AVATAR_SHIFT_Y
     ))
 
-    # Single sharpness pass
     if AVATAR_SHARPNESS_FACTOR != 1.0:
         enhancer = ImageEnhance.Sharpness(avatar_img)
         avatar_img = enhancer.enhance(AVATAR_SHARPNESS_FACTOR)
 
     # ---- Banner processing ----
-    # Batch enhancements where possible
     if BANNER_COLOR_FACTOR != 1.0:
         enhancer = ImageEnhance.Color(banner_img)
         banner_img = enhancer.enhance(BANNER_COLOR_FACTOR)
@@ -295,7 +292,6 @@ def uncommon_process_banner_image(
     )
 
     out = io.BytesIO()
-    # Optimize PNG output for smaller size & faster transfer
     final.save(out, "PNG", optimize=True, compress_level=6)
     out.seek(0)
     return out
@@ -460,6 +456,14 @@ async def uncommon_home() -> HTMLResponse:
                 color: rgba(210, 180, 80, 0.3);
                 margin-top: 8px;
             }
+            .error-box {
+                color: #ff6b6b;
+                font-size: 0.9rem;
+                margin-top: 10px;
+                padding: 8px;
+                background: rgba(255,0,0,0.05);
+                border-radius: 10px;
+            }
             @media (max-width: 600px) {
                 .glass { padding: 25px 18px; }
                 .title { font-size: 2.2rem; }
@@ -481,6 +485,7 @@ async def uncommon_home() -> HTMLResponse:
             <div class="banner-preview" id="preview">
                 <span class="placeholder">Enter a UID and click Generate</span>
             </div>
+            <div class="error-box" id="errorBox" style="display:none"></div>
 
             <div class="endpoint-box">
                 <code>API Endpoint <span>/uc-banner?uid=<span id="endpointUid">11111111</span></span></code>
@@ -499,6 +504,7 @@ async def uncommon_home() -> HTMLResponse:
             const uidInput = document.getElementById('uidInput');
             const fetchBtn = document.getElementById('fetchBtn');
             const preview = document.getElementById('preview');
+            const errorBox = document.getElementById('errorBox');
             const endpointUid = document.getElementById('endpointUid');
 
             function updateEndpoint(uid) {
@@ -512,19 +518,25 @@ async def uncommon_home() -> HTMLResponse:
                 if (!uid) return;
 
                 preview.innerHTML = '<span class="placeholder">Generating...</span>';
+                errorBox.style.display = 'none';
                 fetchBtn.disabled = true;
 
                 const t0 = performance.now();
                 try {
                     const resp = await fetch(`/uc-banner?uid=${encodeURIComponent(uid)}`);
-                    if (!resp.ok) throw new Error('Failed: ' + resp.status);
+                    if (!resp.ok) {
+                        const err = await resp.json();
+                        throw new Error(err.detail || err.error || 'Failed: ' + resp.status);
+                    }
                     const blob = await resp.blob();
                     const url = URL.createObjectURL(blob);
                     preview.innerHTML = `<img src="${url}" alt="Banner">`;
                     const ms = Math.round(performance.now() - t0);
                     preview.innerHTML += `<div class="cache-info">Generated in ${ms}ms</div>`;
                 } catch (err) {
-                    preview.innerHTML = `<span class="placeholder" style="color:#ff6b6b">${err.message}</span>`;
+                    preview.innerHTML = '<span class="placeholder">Failed to generate</span>';
+                    errorBox.textContent = err.message;
+                    errorBox.style.display = 'block';
                 } finally {
                     fetchBtn.disabled = false;
                 }
@@ -544,37 +556,55 @@ async def uncommon_home() -> HTMLResponse:
 async def uncommon_get_banner(uid: str) -> Response:
     """
     Generate and return a banner image for the given Free Fire UID.
-    Optimized with caching and preloaded fonts.
+    FIXED: Now correctly reads India Info API response format.
     """
     # Check banner cache first
     cache_key = str(uid)
     if cache_key in BANNER_CACHE:
         return Response(BANNER_CACHE[cache_key], media_type="image/png")
 
-    # Fetch player info
+    # Fetch player info from India API
     url = f"{INFO_API_URL}?uid={uid}&key=RAM-SAGAR"
     try:
         resp = await uncommon_client.get(url)
         if resp.status_code != 200:
-            raise HTTPException(502, f"Info API returned {resp.status_code}")
+            raise HTTPException(502, f"Info API returned {resp.status_code}: {resp.text[:200]}")
     except Exception as e:
         raise HTTPException(502, f"Failed to fetch player info: {str(e)}")
 
     data = resp.json()
 
-    if "basicInfo" not in data:
-        raise HTTPException(404, "Invalid response: missing basicInfo")
+    # DEBUG: Log the response structure for troubleshooting
+    print(f"DEBUG: Info API response keys: {list(data.keys())}")
 
-    basic_info = data.get("basicInfo", {})
-    clan_info = data.get("clanBasicInfo", {})
+    # FIXED: India Info API returns protobuf JSON with camelCase field names
+    # Structure: { "accountInfoBasic": {...}, "clanInfo": {...}, ... }
 
-    name = basic_info.get("nickname", "Unknown")
-    level = basic_info.get("level", "0")
-    guild = clan_info.get("clanName", "")
+    # Try to find player data in the response
+    basic_info = data.get("accountInfoBasic") or data.get("account_info_basic") or data.get("basicInfo") or {}
+    clan_info = data.get("clanInfo") or data.get("clan_info") or data.get("clanBasicInfo") or {}
 
-    avatar_id = basic_info.get("headPic")
-    banner_id = basic_info.get("bannerId")
-    pin_id = None
+    if not basic_info:
+        raise HTTPException(404, f"Invalid response: missing player data. Keys found: {list(data.keys())}")
+
+    # Extract fields (protobuf JSON uses camelCase)
+    name = basic_info.get("nickname") or basic_info.get("nickName") or "Unknown"
+    level = basic_info.get("level") or "0"
+
+    # Clan name can be in clanInfo or directly in accountInfoBasic
+    guild = (
+        clan_info.get("clanName") or 
+        clan_info.get("clan_name") or 
+        basic_info.get("clanName") or 
+        basic_info.get("clan_name") or 
+        ""
+    )
+
+    avatar_id = basic_info.get("headPic") or basic_info.get("head_pic")
+    banner_id = basic_info.get("bannerId") or basic_info.get("banner_id")
+    pin_id = basic_info.get("pinId") or basic_info.get("pin_id")
+
+    print(f"DEBUG: name={name}, level={level}, guild={guild}, avatar={avatar_id}, banner={banner_id}")
 
     # Fetch images in parallel
     avatar_bytes, banner_bytes, pin_bytes = await asyncio.gather(
@@ -610,6 +640,7 @@ async def uncommon_stats():
         "font_variants_loaded": len(FONT_CACHE),
         "workers": WORKERS,
         "resize_method": "BICUBIC (fast)",
+        "info_api_url": INFO_API_URL,
     }
 
 
