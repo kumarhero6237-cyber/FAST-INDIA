@@ -55,7 +55,7 @@ FONT_CACHE = {}
 
 # ================= API CONFIG =================
 # UPDATE THIS URL TO YOUR INDIA-ONLY API
-INFO_API_URL = "https://india-dun-two.vercel.app/uc-info"
+INFO_API_URL = "https://ramsagar.vercel.app/uc-info"
 
 BASE64_CDN = "aHR0cHM6Ly9jZG4uanNkZWxpdnIubmV0L2doL1NoYWhHQ3JlYXRvci9pY29uQG1haW4vUE5H"
 CDN_URL = base64.b64decode(BASE64_CDN).decode("utf-8")
