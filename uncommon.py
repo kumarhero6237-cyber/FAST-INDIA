@@ -17,7 +17,7 @@ from PIL import Image, ImageDraw, ImageFont, ImageEnhance
 # Change only INFO_API_URL / INFO_API_KEY for your new UID API.
 # ============================================================
 
-INFO_API_URL = "https://india-dun-two.vercel.app/uc-info?uid"
+INFO_API_URL = "https://india-dun-two.vercel.app/uc-info?uid="
 INFO_API_KEY = "RAM-SAGAR"
 
 AVATAR_ZOOM = 1.26
