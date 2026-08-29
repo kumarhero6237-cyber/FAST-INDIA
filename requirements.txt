@@ -1,4 +1,4 @@
 fastapi
-uvicorn
-httpx
+uvicorn[standard]
+httpx[http2]
 Pillow
